@@ -10,14 +10,13 @@ fn test(){
         let _ = holder.push(elem);
     }
     println!("{holder:#?}");
-    for elem in 0..1024 {
+    for _ in 0..1024 {
         let _ = holder.pop();
     }
     println!("{holder:#?}");
-    for elem in 0..7000{
+    for elem in 0..10{
         let _ = holder.push(elem);
     }
     println!("{holder:#?}");
-    println!("{holder:#?}");
-    panic!();
+    panic!("{holder:#?}");
 }

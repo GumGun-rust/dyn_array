@@ -47,11 +47,12 @@ pub struct Array<T, const N: usize = 4096>{
     byte_len: usize,
     elem_len: usize,
     byte_capacity: usize,
-    start: *mut T,
+    start: NonNull<T>,
     phantom: PhantomData<T>,
 }
 
 impl<T:Debug> Array<T> {
+    
     pub fn new() -> Result<Self, errors::Error> {
         Self::new_unchecked(64)
     }
@@ -82,38 +83,44 @@ impl<T:Debug> Array<T> {
             0
         )}.or(Err(errors::Error::MmapFail))?;
         
+        let memory_holder_nn = unsafe{NonNull::new_unchecked(memory_holder as *mut T)};
+        
         Ok(Self{
             byte_len:0,
             elem_len:0,
             byte_capacity:byte_cap.into(),
-            start: memory_holder as *mut T,
+            start: memory_holder_nn,
             phantom: PhantomData,
         })
         
     }
 
 
-    pub fn push(&mut self, data:T) -> Result<(), errors::Error> {
-        if self.byte_len+size_of::<T>() > self.byte_capacity {
+    pub fn push(&mut self, data:T) -> Result<Option<*mut u8>, errors::Error> {
+        let ret_holder:Option<*mut u8> = if self.byte_len+size_of::<T>() > self.byte_capacity {
             use nix::sys::mman::MRemapFlags;
             let old_byte_capacity = self.byte_capacity;
             self.byte_capacity <<= 1;
             
-            self.start = unsafe{mremap(
-                self.start as *mut c_void,
+            self.start = unsafe{NonNull::new_unchecked(mremap(
+                self.start.as_ptr() as *mut c_void,
                 old_byte_capacity,
                 self.byte_capacity,
                 MRemapFlags::MREMAP_MAYMOVE,
                 None
-            )}.or(Err(errors::Error::MremapFail))? as *mut T;
-        }
+            ).or(Err(errors::Error::MremapFail))? as *mut T)};
+            
+            Some(self.start.as_ptr() as *mut u8)
+        } else {
+            None
+        };
         
-        let holder = unsafe{self.start.add(self.elem_len)};
+        let holder = unsafe{self.start.as_ptr().add(self.elem_len)};
         let pivot_mut = unsafe{NonNull::new_unchecked(holder).as_mut()};
         *pivot_mut = data;
         self.elem_len += 1;
         self.byte_len += size_of::<T>();
-        Ok(())
+        Ok(ret_holder)
     }
     
     pub fn len(&self) -> usize {
@@ -128,13 +135,13 @@ impl<T:Debug> Array<T> {
                 let old_byte_capacity = self.byte_capacity;
                 self.byte_capacity >>= 1;
                 
-                self.start = unsafe{mremap(
-                    self.start as *mut c_void,
+                self.start = unsafe{NonNull::new_unchecked(mremap(
+                    self.start.as_ptr() as *mut c_void,
                     old_byte_capacity,
                     self.byte_capacity,
                     MRemapFlags::MREMAP_MAYMOVE,
                     None
-                )}.or(Err(errors::Error::MremapFail))? as *mut T;
+                ).or(Err(errors::Error::MremapFail))? as *mut T)};
             }
         }
         self.elem_len -= 1;
@@ -142,25 +149,49 @@ impl<T:Debug> Array<T> {
         Ok(())
     }
     
+    pub fn base(&self) -> NonNull<T> {
+        self.start
+    }
     
-    fn sleep() {
-        let mut buf = String::new();
-        std::io::stdin().read_line(&mut buf);
+    pub fn allocate(&mut self)  -> Result<(Option<*mut u8>, NonNull<T>), errors::Error> {
+        let ret_holder:Option<*mut u8> = if self.byte_len+size_of::<T>() > self.byte_capacity {
+            use nix::sys::mman::MRemapFlags;
+            let old_byte_capacity = self.byte_capacity;
+            self.byte_capacity <<= 1;
+            
+            self.start = unsafe{NonNull::new_unchecked(mremap(
+                self.start.as_ptr() as *mut c_void,
+                old_byte_capacity,
+                self.byte_capacity,
+                MRemapFlags::MREMAP_MAYMOVE,
+                None
+            ).or(Err(errors::Error::MremapFail))? as *mut T)};
+            
+            Some(self.start.as_ptr() as *mut u8)
+        } else {
+            None
+        };
+        
+        let holder = unsafe{self.start.as_ptr().add(self.elem_len)};
+        let pivot = unsafe{NonNull::new_unchecked(holder)};
+        self.elem_len += 1;
+        self.byte_len += size_of::<T>();
+        Ok((ret_holder, pivot))
+        
     }
     
 }
 
-impl<T> Debug for Array<T> {
+impl<T:Debug> Debug for Array<T> {
     
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        //todo!();
-        //let data_holder = unsafe{slice::from_raw_parts(self.start, self.elem_len)};
+        let data_holder = unsafe{slice::from_raw_parts(self.start.as_ptr(), self.elem_len)};
         f.debug_struct("Array")
            .field("elem_len", &self.elem_len)
            .field("byte_len", &self.byte_len)
            .field("byte_capacity", &format!("0x{:X}", self.byte_capacity))
            .field("content", &self.start)
-           //.field("content", &&data_holder[..])
+           .field("content", &&data_holder[..])
            .finish()
     }
     
