@@ -51,7 +51,7 @@ pub struct Array<T, const N: usize = 4096>{
     phantom: PhantomData<T>,
 }
 
-impl<T:Debug> Array<T> {
+impl<T> Array<T> {
     
     pub fn new() -> Result<Self, errors::Error> {
         Self::new_unchecked(64)
