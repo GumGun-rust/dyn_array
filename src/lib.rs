@@ -16,6 +16,10 @@ use std::{
     mem::size_of,
     num::NonZeroUsize,
     os::fd::BorrowedFd,
+    ops::{
+        Index,
+        IndexMut,
+    },
 };
 
 use nix::{
@@ -153,7 +157,7 @@ impl<T> Array<T> {
         self.start
     }
     
-    pub fn allocate(&mut self)  -> Result<(Option<*mut u8>, NonNull<T>), errors::Error> {
+    pub fn allocate(&mut self) -> Result<(Option<*mut u8>, NonNull<T>), errors::Error> {
         let ret_holder:Option<*mut u8> = if self.byte_len+size_of::<T>() > self.byte_capacity {
             use nix::sys::mman::MRemapFlags;
             let old_byte_capacity = self.byte_capacity;
@@ -180,6 +184,36 @@ impl<T> Array<T> {
         
     }
     
+    pub fn try_get(&mut self, index:usize) -> Result<&T, errors::Error> {
+        if index>self.elem_len {
+            return Err(errors::Error::OutOfRangeIndex);
+        }
+        Ok(&self[index])
+    }
+
+    pub fn try_get_mut(&mut self, index:usize) -> Result<&mut T, errors::Error> {
+        if index>self.elem_len {
+            return Err(errors::Error::OutOfRangeIndex);
+        }
+        Ok(&mut self[index])
+    }
+}
+
+impl<T> Index<usize> for Array<T> {
+    type Output = T;
+    
+    fn index(&self, index:usize) -> &Self::Output {
+        let ptr = unsafe{self.start.as_ptr().add(index)};
+        unsafe{ptr.as_ref().unwrap()}
+    }
+}
+
+impl<T> IndexMut<usize> for Array<T> {
+    
+    fn index_mut(&mut self, index:usize) -> &mut Self::Output {
+        let ptr = unsafe{self.start.as_ptr().add(index)};
+        unsafe{ptr.as_mut().unwrap()}
+    }
 }
 
 impl<T:Debug> Debug for Array<T> {

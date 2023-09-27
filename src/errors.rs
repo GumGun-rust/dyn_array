@@ -9,6 +9,8 @@ pub enum Error{
     MmapFail,
     #[error("call to mremap failed")]
     MremapFail,
+    #[error("index is out of range")]
+    OutOfRangeIndex,
 }
 
 
