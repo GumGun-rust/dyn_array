@@ -181,10 +181,14 @@ impl<T> Array<T> {
         self.elem_len += 1;
         self.byte_len += size_of::<T>();
         Ok((ret_holder, pivot))
+    }
+    
+    pub fn get_ptr_mut(&mut self, index:usize) -> *mut T {
+        unsafe{self.start.as_ptr().add(index)}
         
     }
     
-    pub fn try_get(&mut self, index:usize) -> Result<&T, errors::Error> {
+    pub fn try_get(&self, index:usize) -> Result<&T, errors::Error> {
         if index>self.elem_len {
             return Err(errors::Error::OutOfRangeIndex);
         }
@@ -217,7 +221,6 @@ impl<T> IndexMut<usize> for Array<T> {
 }
 
 impl<T:Debug> Debug for Array<T> {
-    
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let data_holder = unsafe{slice::from_raw_parts(self.start.as_ptr(), self.elem_len)};
         f.debug_struct("Array")
@@ -228,5 +231,5 @@ impl<T:Debug> Debug for Array<T> {
            .field("content", &&data_holder[..])
            .finish()
     }
-    
 }
+
